@@ -16,10 +16,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
@@ -169,6 +173,15 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             return false
         }
 
+        if (!dateText.trim().matches(Regex("[/0-9]+"))) {
+            AlertDialog.Builder(context)
+                .setTitle("エラー")
+                .setMessage("日付は半角数値・/のみ入力可能")
+                .setPositiveButton("OK", null)
+                .show()
+            return false
+        }
+
         val checkValue = yenText.trim()
 
         if (checkValue.trim().isBlank()) {
@@ -249,7 +262,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
         modifier
             .fillMaxSize()
             .background(Color(0xFFE6E6FA))
-            .padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 16.dp)
+            .padding(16.dp)
     ) {
         // 合計金額ラベル
         Text(
