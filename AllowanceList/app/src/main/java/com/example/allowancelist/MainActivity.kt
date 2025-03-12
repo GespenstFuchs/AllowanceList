@@ -3,6 +3,8 @@ package com.example.allowancelist
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.os.Bundle
+import android.os.Environment
+import android.os.Environment.DIRECTORY_DOCUMENTS
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -95,16 +97,15 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
 
     val context = LocalContext.current
 
-    // アプリ専用外部ストレージのディレクトリを取得する。
-    // 【/storage/emulated/0/Android/data/com.example.allowancelist/files】
-    val externalFilesDir = context.getExternalFilesDir(null)
+    // 小遣いリスト.txtを配置するディレクトリを取得する。
+    val filesDir = Environment.getExternalStoragePublicDirectory(DIRECTORY_DOCUMENTS)
 
     // フォルダが存在しない場合も考慮し、常にフォルダを作成する。
-    val directory = File(externalFilesDir.toString())
+    val directory = File(filesDir.toString())
     directory.mkdirs()
 
     // 対象テキストファイルフルパスを取得・保持する。
-    val targetTextFile = File(externalFilesDir, "List.txt")
+    val targetTextFile = File(filesDir, "小遣いリスト.txt")
 
     // ファイルの有無を判定する。
     if (!targetTextFile.exists()) {
@@ -113,13 +114,15 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
     }
 
     // 改行ごとに分割して、空行は除外する
-    val fileItems: List<String> = targetTextFile.readText(Charsets.UTF_8).lines().filter { it.isNotBlank() }
+    val fileItems: List<String> =
+        targetTextFile.readText(Charsets.UTF_8).lines().filter { it.isNotBlank() }
 
     // リストにデータを設定する。
     val itemsList = remember {
         mutableStateListOf<ItemData>().apply {
             addAll(fileItems.map { raw ->
-                ItemData(raw = mutableStateOf(raw)) })
+                ItemData(raw = mutableStateOf(raw))
+            })
         }
     }
 
@@ -136,16 +139,19 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
     var yenText by remember { mutableStateOf("") }
     // メモ
     var memoText by remember { mutableStateOf("") }
+    // 合計金額文字色
+    var totalTextColor by remember { mutableStateOf(Color.Black) }
+    // 削除ボタン活性状態
+    var deleteButtonEnabled by remember { mutableStateOf(false) }
     // 保存ボタン活性状態
-    var saveButtonenabled by remember { mutableStateOf(false) }
+    var saveButtonEnabled by remember { mutableStateOf(false) }
 
     // 現在選択中の項目位置（初期値：-1（選択無し））
     val selectedItemIndex = remember { mutableIntStateOf(-1) }
 
     // チェック編集処理
     fun checkEdit(): Boolean {
-        if (dateText.trim().isBlank())
-        {
+        if (dateText.trim().isBlank()) {
             AlertDialog.Builder(context)
                 .setTitle("エラー")
                 .setMessage("日付が未入力")
@@ -154,10 +160,18 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             return false
         }
 
+        if (dateText.trim().length > 10) {
+            AlertDialog.Builder(context)
+                .setTitle("エラー")
+                .setMessage("日付は１０桁まで入力可能")
+                .setPositiveButton("OK", null)
+                .show()
+            return false
+        }
+
         val checkValue = yenText.trim()
 
-        if (checkValue.trim().isBlank())
-        {
+        if (checkValue.trim().isBlank()) {
             AlertDialog.Builder(context)
                 .setTitle("エラー")
                 .setMessage("金額が未入力")
@@ -170,7 +184,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
         val index = checkValue.indexOf("-")
         if (index != -1) {
             // ハイフンが存在する場合
-            if (index != 0 ||  checkValue.count { it == '-' } != 1) {
+            if (index != 0 || checkValue.count { it == '-' } != 1) {
                 // ハイフンの位置・個数が不正の場合
                 AlertDialog.Builder(context)
                     .setTitle("エラー")
@@ -186,9 +200,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             // 半角数値のみ
             dateText = dateText.trim()
             yenText = checkValue
-        }
-        else
-        {
+        } else {
             AlertDialog.Builder(context)
                 .setTitle("エラー")
                 .setMessage("金額に数値以外が入力")
@@ -220,6 +232,13 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             }
         }
 
+        // ハイフンの有無を判定する。
+        totalTextColor = if (total.toString().indexOf("-") == 0) {
+            Color.Red
+        } else {
+            Color.Black
+        }
+
         totalText = "合計: ¥" + moneyFormatter.format(total)
     }
 
@@ -230,15 +249,16 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
         modifier
             .fillMaxSize()
             .background(Color(0xFFE6E6FA))
-            .padding(start = 16.dp, top = 48.dp, end = 16.dp, bottom = 16.dp)
+            .padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 16.dp)
     ) {
         // 合計金額ラベル
         Text(
             text = totalText,
             style = androidx.compose.ui.text.TextStyle(
                 fontSize = 28.sp,
-                color = Color.Black
-        ))
+                color = totalTextColor
+            )
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -266,6 +286,9 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                                 // 選択位置を保持する。
                                 selectedItemIndex.intValue = index
 
+                                // 選択した項目の背景色を変更する。
+                                item.bgColor.value = Color(0xFFFFEAEA)
+
                                 // カンマで分割する。
                                 val parts = item.raw.value.split(",", limit = 3)
 
@@ -278,20 +301,39 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                                 // メモ
                                 memoText = parts[2]
 
+                                // 削除ボタンを非活性にする。
+                                deleteButtonEnabled = false
+
                                 // 保存ボタンを活性にする。
-                                saveButtonenabled = true
+                                saveButtonEnabled = true
                             },
                             onLongClick = {
-                                // 背景色を変更する。
-                                item.bgColor.value = changedColor
+                                // 背景色を判定する。
+                                if (item.bgColor.value == changedColor) {
+                                    // 変更色の場合
+
+                                    // 背景色を変更する。
+                                    item.bgColor.value = defaultColor
+
+                                    // 全項目の背景色がデフォルトカラーの場合、削除ボタンを非活性にする。
+                                    deleteButtonEnabled =
+                                        itemsList.any { it.bgColor.value == changedColor }
+                                } else {
+                                    // 通常色の場合
+
+                                    // 背景色を変更する。
+                                    item.bgColor.value = changedColor
+
+                                    // 削除ボタンを活性にする。
+                                    deleteButtonEnabled = true
+                                }
                             }
                         )
                 )
                 {
                     // 設定する文字色を設定する。
                     var setColor = Color.Black
-                    if (itemParts[1][0] == '-')
-                    {
+                    if (itemParts[1][0] == '-') {
                         setColor = Color.Red
                     }
 
@@ -301,7 +343,8 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                         color = setColor,
                         style = androidx.compose.ui.text.TextStyle(
                             fontSize = 20.sp,
-                            color = Color.Black),
+                            color = Color.Black
+                        ),
                         modifier = Modifier
                             .align(Alignment.CenterStart)
                     )
@@ -395,28 +438,32 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             }) {
                 Text(text = "新規追加")
             }
-            Button(onClick = {
-                // 背景色が変更されている項目を削除する。
-                itemsList.removeAll { it.bgColor.value == changedColor }
-                saveToFile()
-                updateTotal()
-            }) {
+            Button(
+                enabled = deleteButtonEnabled,
+                onClick = {
+                    // 背景色が変更されている項目を削除する。
+                    itemsList.removeAll { it.bgColor.value == changedColor }
+                    saveToFile()
+                    updateTotal()
+
+                    // 削除ボタンを非活性にする。
+                    deleteButtonEnabled = false
+                }) {
                 Text(text = "削除")
             }
             Button(
-                enabled = saveButtonenabled,
+                enabled = saveButtonEnabled,
                 onClick = {
                     if (selectedItemIndex.intValue != -1 && selectedItemIndex.intValue < itemsList.size) {
                         if (checkEdit()) {
                             val item = itemsList[selectedItemIndex.intValue]
                             val newRaw = "${dateText},${yenText},$memoText"
                             item.raw.value = newRaw
-                            item.bgColor.value = defaultColor
                             saveToFile()
                             updateTotal()
                         }
-                }
-            }) {
+                    }
+                }) {
                 Text(text = "保存")
             }
         }
