@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -98,6 +99,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
     val context = LocalContext.current
 
     // 小遣いリスト.txtを配置するディレクトリを取得する。
+    // 【/storage/emulated/0/Documents】
     val filesDir = Environment.getExternalStoragePublicDirectory(DIRECTORY_DOCUMENTS)
 
     // フォルダが存在しない場合も考慮し、常にフォルダを作成する。
@@ -363,7 +365,8 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        // リスト下部の余白
+        Spacer(modifier = Modifier.height(16.dp))
 
         // １行目
         Row(
@@ -386,11 +389,17 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                     errorContainerColor = Color(0xFFE0FFFF),
                 ),
             )
+        }
 
-            Spacer(modifier = Modifier.height(8.dp))
+        // １行目・２行目の空白
+        Spacer(modifier = Modifier.height(16.dp))
 
-            Text(text = "　¥ ")
-            Spacer(modifier = Modifier.height(8.dp))
+        // ２行目
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Start
+        ) {
+            Text(text = "金額：")
 
             // 金額
             TextField(
@@ -407,14 +416,21 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                 ),
             )
         }
+
+        // ２行目・３行目の空白
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ２行目
+        // ３行目
         Row(
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Start,
+            modifier = Modifier.imePadding()
         ) {
             // メモ
-            Text(text = "メモ：")
+            Text(
+                modifier = Modifier.imePadding(),
+                text = "メモ："
+            )
             Spacer(modifier = Modifier.height(8.dp))
             TextField(
                 value = memoText,
