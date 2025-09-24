@@ -2,9 +2,12 @@ package com.example.allowancelist
 
 import android.annotation.SuppressLint
 import android.app.AlertDialog
+import android.content.ContentUris
+import android.content.ContentValues
+import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
 import android.os.Environment.DIRECTORY_DOCUMENTS
+import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -21,10 +24,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -46,10 +51,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.allowancelist.ui.theme.AllowanceListTheme
-import java.io.File
+import java.nio.charset.StandardCharsets
 import java.text.DecimalFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+
 
 /**
  * MainActivity
@@ -97,27 +103,35 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
     )
 
     val context = LocalContext.current
+    var readText: String? = ""
 
-    // 小遣いリスト.txtを配置するディレクトリを取得する。
-    // 【/storage/emulated/0/Documents】
-    val filesDir = Environment.getExternalStoragePublicDirectory(DIRECTORY_DOCUMENTS)
+    val projection = arrayOf(MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.DISPLAY_NAME)
+    val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME}=?"
+    val selectionArgs = arrayOf("小遣いリスト.txt")
 
-    // フォルダが存在しない場合も考慮し、常にフォルダを作成する。
-    val directory = File(filesDir.toString())
-    directory.mkdirs()
+    context.contentResolver.query(
+        MediaStore.Files.getContentUri("external"),
+        projection,
+        selection,
+        selectionArgs,
+        null
+    )?.use { cursor ->
+        if (cursor.moveToFirst()) {
+            val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
 
-    // 対象テキストファイルフルパスを取得・保持する。
-    val targetTextFile = File(filesDir, "小遣いリスト.txt")
+            // 場所：/storage/emulated/0/Documents
+            val uri = ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), id)
 
-    // ファイルの有無を判定する。
-    if (!targetTextFile.exists()) {
-        // 存在しない場合、新規作成する。
-        targetTextFile.writeText("", Charsets.UTF_8)
+            // 小遣いリスト.txtを読み込む。
+            readText = context.contentResolver.openInputStream(uri)?.use { input -> input.reader(Charsets.UTF_8).readText() }
+        }
     }
 
-    // 改行ごとに分割して、空行は除外する
-    val fileItems: List<String> =
-        targetTextFile.readText(Charsets.UTF_8).lines().filter { it.isNotBlank() }
+    // 改行ごとに分割して、空行は除外する。
+    val fileItems: List<String> = readText
+        ?.lines()
+        ?.filter { it.isNotEmpty() }
+        ?: emptyList()
 
     // リストにデータを設定する。
     val itemsList = remember {
@@ -225,10 +239,22 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
 
     // ファイル保存処理
     fun saveToFile() {
-        targetTextFile.writeText(
-            itemsList.joinToString("\n") { it.raw.value },
-            Charsets.UTF_8
+        val values = ContentValues().apply {
+            put(MediaStore.Files.FileColumns.DISPLAY_NAME, "小遣いリスト.txt")
+            put(MediaStore.Files.FileColumns.MIME_TYPE, "text/plain")
+            put(MediaStore.Files.FileColumns.RELATIVE_PATH, DIRECTORY_DOCUMENTS)
+        }
+
+        val uri: Uri? = context.contentResolver.insert(
+            MediaStore.Files.getContentUri("external"),
+            values
         )
+
+        if (uri != null) {
+            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                outputStream.write(itemsList.joinToString("\n") { it.raw.value }.toByteArray(StandardCharsets.UTF_8))
+            }
+        }
     }
 
     // 合計金額更新処理
@@ -327,8 +353,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                                     item.bgColor.value = defaultColor
 
                                     // 全項目の背景色がデフォルトカラーの場合、削除ボタンを非活性にする。
-                                    deleteButtonEnabled =
-                                        itemsList.any { it.bgColor.value == changedColor }
+                                    deleteButtonEnabled = itemsList.any { it.bgColor.value == changedColor }
                                 } else {
                                     // 通常色の場合
 
@@ -356,8 +381,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                             fontSize = 20.sp,
                             color = Color.Black
                         ),
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
+                        modifier = Modifier.align(Alignment.CenterStart)
                     )
                 }
 
@@ -374,7 +398,10 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.Start
         ) {
             // 日付
-            Text(text = "日付：")
+            Text(
+                text = "日付：",
+                color = Color.Black
+            )
             Spacer(modifier = Modifier.height(8.dp))
             TextField(
                 value = dateText,
@@ -387,6 +414,10 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                     unfocusedContainerColor = Color(0xFFE0FFFF),
                     disabledContainerColor = Color(0xFFE0FFFF),
                     errorContainerColor = Color(0xFFE0FFFF),
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    disabledTextColor = Color.Black,
+                    errorTextColor = Color.Black,
                 ),
             )
         }
@@ -399,7 +430,10 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Start
         ) {
-            Text(text = "金額：")
+            Text(
+                text = "金額：",
+                color = Color.Black
+            )
 
             // 金額
             TextField(
@@ -413,8 +447,33 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                     unfocusedContainerColor = Color(0xFFE0FFFF),
                     disabledContainerColor = Color(0xFFE0FFFF),
                     errorContainerColor = Color(0xFFE0FFFF),
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    disabledTextColor = Color.Black,
+                    errorTextColor = Color.Black,
                 ),
             )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // －ボタン
+            Button(
+                onClick = {
+                    yenText = if (yenText.startsWith("-")) {
+                        // 先頭が - の場合 → 削除
+                        yenText.removePrefix("-")
+                    } else {
+                        // 先頭に - がない場合 → 追加
+                        "-$yenText"
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFFDAB9),
+                    contentColor = Color.Black,
+                )
+            ) {
+                Text(text = "－")
+            }
         }
 
         // ２行目・３行目の空白
@@ -429,7 +488,8 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             // メモ
             Text(
                 modifier = Modifier.imePadding(),
-                text = "メモ："
+                text = "メモ：",
+                color = Color.Black
             )
             Spacer(modifier = Modifier.height(8.dp))
             TextField(
@@ -442,6 +502,10 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                     unfocusedContainerColor = Color(0xFFE0FFFF),
                     disabledContainerColor = Color(0xFFE0FFFF),
                     errorContainerColor = Color(0xFFE0FFFF),
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    disabledTextColor = Color.Black,
+                    errorTextColor = Color.Black,
                 ),
             )
         }
@@ -453,14 +517,19 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Button(onClick = {
-                if (checkEdit()) {
-                    val newRaw = "${dateText},${yenText},$memoText"
-                    itemsList.add(0, ItemData(raw = mutableStateOf(newRaw)))
-                    saveToFile()
-                    updateTotal()
+            Button(
+                onClick = {
+                    if (checkEdit()) {
+                        val newRaw = "${dateText},${yenText},$memoText"
+                        itemsList.add(0, ItemData(raw = mutableStateOf(newRaw)))
+                        saveToFile()
+                        updateTotal()
                 }
-            }) {
+            },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFFFDAB9),
+                contentColor = Color.Black,
+            )) {
                 Text(text = "新規追加")
             }
             Button(
@@ -473,6 +542,15 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
 
                     // 削除ボタンを非活性にする。
                     deleteButtonEnabled = false
+                },
+                colors = if (deleteButtonEnabled) {
+                    ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFDAB9),
+                        contentColor = Color.Black,
+                    )
+                } else {
+                    // デフォルト
+                    ButtonDefaults.buttonColors()
                 }) {
                 Text(text = "削除")
             }
@@ -488,6 +566,15 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                             updateTotal()
                         }
                     }
+                },
+                colors = if (saveButtonEnabled) {
+                    ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFDAB9),
+                        contentColor = Color.Black,
+                    )
+                } else {
+                    // デフォルト
+                    ButtonDefaults.buttonColors()
                 }) {
                 Text(text = "保存")
             }
@@ -496,7 +583,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
 }
 
 // プレビュー用のComposable関数。
-// Android Studioのプレビュー機能でUIを確認するために使用されます。
+// Android Studioのプレビュー機能でUIを確認するために使用される。
 @Preview(showBackground = true)
 @Composable
 fun PreviewAllowancelist() {
