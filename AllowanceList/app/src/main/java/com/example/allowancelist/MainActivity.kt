@@ -28,13 +28,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -46,16 +47,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.example.allowancelist.ui.theme.AllowanceListTheme
 import java.nio.charset.StandardCharsets
 import java.text.DecimalFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-
 
 /**
  * MainActivity
@@ -92,6 +95,9 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Allowancelist(modifier: Modifier = Modifier) {
+    // ファイル名を定義する。
+    val fileName = "小遣いリスト.txt"
+
     // 背景色を定義する。
     val defaultColor = Color(0xFFb2ffff)
     val changedColor = Color(0xFFD3D3D3)
@@ -107,7 +113,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
 
     val projection = arrayOf(MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.DISPLAY_NAME)
     val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME}=?"
-    val selectionArgs = arrayOf("小遣いリスト.txt")
+    val selectionArgs = arrayOf(fileName)
 
     context.contentResolver.query(
         MediaStore.Files.getContentUri("external"),
@@ -139,6 +145,85 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             addAll(fileItems.map { raw ->
                 ItemData(raw = mutableStateOf(raw))
             })
+        }
+    }
+
+    // ファイル保存処理
+    fun saveToFile() {
+        // 保存先（Documents配下）を指すMediaStoreのURIを取得する。
+        val collection = MediaStore.Files.getContentUri("external")
+
+        // 既存ファイルを検索するためのクエリ条件を設定する。
+        // （DISPLAY_NAME（ファイル名）・RELATIVE_PATH（保存先パス）が一致するものを探す。）
+        val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME}=? AND ${MediaStore.Files.FileColumns.RELATIVE_PATH}=?"
+        val selectionArgs = arrayOf(fileName, "$DIRECTORY_DOCUMENTS/")
+
+        var uri: Uri? = null
+
+        // contentResolverで、MediaStoreを検索する。
+        context.contentResolver.query(
+            collection, // 検索対象のコレクション（外部ストレージ）
+            arrayOf(MediaStore.Files.FileColumns._ID),  // 必要な列（_IDのみ）
+            selection,  // 検索条件
+            selectionArgs,  // 検索条件の引数（ファイル名・パス）
+            null    // ソート条件は不要
+        )?.use { cursor ->
+            // 結果の有無を判定する。
+            if (cursor.moveToFirst()) {
+                // 一致した場合、URIを格納する。
+                val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
+                uri = ContentUris.withAppendedId(collection, id)
+            }
+        }
+
+        // URIの有無を判定する。
+        if (uri == null) {
+            // 存在しない場合
+            val values = ContentValues().apply {
+                put(MediaStore.Files.FileColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.Files.FileColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.Files.FileColumns.RELATIVE_PATH, DIRECTORY_DOCUMENTS)
+            }
+
+            // 新しいファイルをMediaStoreに登録する。
+            uri = context.contentResolver.insert(collection, values)
+        }
+
+        // ファイルの書き込みを行う。
+        uri?.let { targetUri ->
+            // 【mode="w"】で、上書き保存とする。
+            context.contentResolver.openOutputStream(targetUri, "w")?.use { outputStream ->
+                outputStream.write(
+                    itemsList.joinToString("\n") { it.raw.value }
+                        .toByteArray(StandardCharsets.UTF_8)
+                )
+            }
+        }
+    }
+
+    // ライフサイクルオーナーを取得・保持する。
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Composableが画面に表示された時に一度だけ実行される処理
+    DisposableEffect(lifecycleOwner) {
+        // ライフサイクルイベントを監視するオブジェクトを生成する。
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    // 画面が完全に見えなくなった時（バックグラウンド）に、保存処理を行う。
+                    saveToFile()
+                }
+                // エラーになるために追加している。
+                else -> {}
+            }
+        }
+
+        // ライフサイクルにオブザーバーを登録する。
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        // Composableが破棄された時にオブザーバーを解除する。
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -235,26 +320,6 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
         }
 
         return true
-    }
-
-    // ファイル保存処理
-    fun saveToFile() {
-        val values = ContentValues().apply {
-            put(MediaStore.Files.FileColumns.DISPLAY_NAME, "小遣いリスト.txt")
-            put(MediaStore.Files.FileColumns.MIME_TYPE, "text/plain")
-            put(MediaStore.Files.FileColumns.RELATIVE_PATH, DIRECTORY_DOCUMENTS)
-        }
-
-        val uri: Uri? = context.contentResolver.insert(
-            MediaStore.Files.getContentUri("external"),
-            values
-        )
-
-        if (uri != null) {
-            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                outputStream.write(itemsList.joinToString("\n") { it.raw.value }.toByteArray(StandardCharsets.UTF_8))
-            }
-        }
     }
 
     // 合計金額更新処理
@@ -457,7 +522,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.width(8.dp))
 
             // －ボタン
-            Button(
+            OutlinedButton(
                 onClick = {
                     yenText = if (yenText.startsWith("-")) {
                         // 先頭が - の場合 → 削除
@@ -517,7 +582,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Button(
+            OutlinedButton(
                 onClick = {
                     if (checkEdit()) {
                         val newRaw = "${dateText},${yenText},$memoText"
@@ -532,7 +597,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             )) {
                 Text(text = "新規追加")
             }
-            Button(
+            OutlinedButton(
                 enabled = deleteButtonEnabled,
                 onClick = {
                     // 背景色が変更されている項目を削除する。
@@ -544,17 +609,22 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                     deleteButtonEnabled = false
                 },
                 colors = if (deleteButtonEnabled) {
+                    // 活性の場合
                     ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFFFDAB9),
                         contentColor = Color.Black,
                     )
                 } else {
-                    // デフォルト
-                    ButtonDefaults.buttonColors()
-                }) {
+                    // 非活性の場合
+                    ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFDAB9),
+                        contentColor = Color.Gray,
+                    )
+                }
+            ) {
                 Text(text = "削除")
             }
-            Button(
+            OutlinedButton(
                 enabled = saveButtonEnabled,
                 onClick = {
                     if (selectedItemIndex.intValue != -1 && selectedItemIndex.intValue < itemsList.size) {
@@ -568,14 +638,19 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                     }
                 },
                 colors = if (saveButtonEnabled) {
+                    // 活性の場合
                     ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFFFDAB9),
                         contentColor = Color.Black,
                     )
                 } else {
-                    // デフォルト
-                    ButtonDefaults.buttonColors()
-                }) {
+                    // 非活性の場合
+                    ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFDAB9),
+                        contentColor = Color.Gray,
+                    )
+                }
+            ) {
                 Text(text = "保存")
             }
         }
