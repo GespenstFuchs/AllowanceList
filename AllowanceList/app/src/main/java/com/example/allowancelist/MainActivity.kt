@@ -1,13 +1,9 @@
 package com.example.allowancelist
 
-import android.annotation.SuppressLint
 import android.app.AlertDialog
-import android.content.ContentUris
-import android.content.ContentValues
-import android.net.Uri
+import android.content.Context
 import android.os.Bundle
-import android.os.Environment.DIRECTORY_DOCUMENTS
-import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -55,10 +51,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.allowancelist.ui.theme.AllowanceListTheme
-import java.nio.charset.StandardCharsets
 import java.text.DecimalFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import androidx.core.content.edit
 
 /**
  * MainActivity
@@ -109,29 +105,13 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
     )
 
     val context = LocalContext.current
-    var readText: String? = ""
 
-    val projection = arrayOf(MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.DISPLAY_NAME)
-    val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME}=?"
-    val selectionArgs = arrayOf(fileName)
+    // プリファレンスを読み込み、オブジェクトを生成する。
+    val sharedPref = context.getSharedPreferences("allowance_list", Context.MODE_PRIVATE)
 
-    context.contentResolver.query(
-        MediaStore.Files.getContentUri("external"),
-        projection,
-        selection,
-        selectionArgs,
-        null
-    )?.use { cursor ->
-        if (cursor.moveToFirst()) {
-            val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
-
-            // 場所：/storage/emulated/0/Documents
-            val uri = ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), id)
-
-            // 小遣いリスト.txtを読み込む。
-            readText = context.contentResolver.openInputStream(uri)?.use { input -> input.reader(Charsets.UTF_8).readText() }
-        }
-    }
+    // 保存しているテキストを読み込む。
+    // パス：/data/data/com.example.allowancelist/shared_prefs/allowance_list.xml
+    val readText = sharedPref.getString("ALLOWANCE_LIST_TEXT", "")
 
     // 改行ごとに分割して、空行は除外する。
     val fileItems: List<String> = readText
@@ -150,54 +130,10 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
 
     // ファイル保存処理
     fun saveToFile() {
-        // 保存先（Documents配下）を指すMediaStoreのURIを取得する。
-        val collection = MediaStore.Files.getContentUri("external")
-
-        // 既存ファイルを検索するためのクエリ条件を設定する。
-        // （DISPLAY_NAME（ファイル名）・RELATIVE_PATH（保存先パス）が一致するものを探す。）
-        val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME}=? AND ${MediaStore.Files.FileColumns.RELATIVE_PATH}=?"
-        val selectionArgs = arrayOf(fileName, "$DIRECTORY_DOCUMENTS/")
-
-        var uri: Uri? = null
-
-        // contentResolverで、MediaStoreを検索する。
-        context.contentResolver.query(
-            collection, // 検索対象のコレクション（外部ストレージ）
-            arrayOf(MediaStore.Files.FileColumns._ID),  // 必要な列（_IDのみ）
-            selection,  // 検索条件
-            selectionArgs,  // 検索条件の引数（ファイル名・パス）
-            null    // ソート条件は不要
-        )?.use { cursor ->
-            // 結果の有無を判定する。
-            if (cursor.moveToFirst()) {
-                // 一致した場合、URIを格納する。
-                val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
-                uri = ContentUris.withAppendedId(collection, id)
-            }
-        }
-
-        // URIの有無を判定する。
-        if (uri == null) {
-            // 存在しない場合
-            val values = ContentValues().apply {
-                put(MediaStore.Files.FileColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.Files.FileColumns.MIME_TYPE, "text/plain")
-                put(MediaStore.Files.FileColumns.RELATIVE_PATH, DIRECTORY_DOCUMENTS)
-            }
-
-            // 新しいファイルをMediaStoreに登録する。
-            uri = context.contentResolver.insert(collection, values)
-        }
-
-        // ファイルの書き込みを行う。
-        uri?.let { targetUri ->
-            // 【mode="w"】で、上書き保存とする。
-            context.contentResolver.openOutputStream(targetUri, "w")?.use { outputStream ->
-                outputStream.write(
-                    itemsList.joinToString("\n") { it.raw.value }
-                        .toByteArray(StandardCharsets.UTF_8)
-                )
-            }
+        sharedPref.edit(commit = true) {
+            putString(
+                "ALLOWANCE_LIST_TEXT",
+                itemsList.joinToString("\n") { it.raw.value })
         }
     }
 
@@ -323,7 +259,6 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
     }
 
     // 合計金額更新処理
-    @SuppressLint("DefaultLocale")
     fun updateTotal() {
         var total = 0
         itemsList.forEach { it ->
@@ -589,6 +524,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                         itemsList.add(0, ItemData(raw = mutableStateOf(newRaw)))
                         saveToFile()
                         updateTotal()
+                        Toast.makeText(context, "新規追加しました。", Toast.LENGTH_SHORT).show()
                 }
             },
             colors = ButtonDefaults.buttonColors(
@@ -604,6 +540,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                     itemsList.removeAll { it.bgColor.value == changedColor }
                     saveToFile()
                     updateTotal()
+                    Toast.makeText(context, "削除しました。", Toast.LENGTH_SHORT).show()
 
                     // 削除ボタンを非活性にする。
                     deleteButtonEnabled = false
@@ -634,6 +571,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                             item.raw.value = newRaw
                             saveToFile()
                             updateTotal()
+                            Toast.makeText(context, "保存しました。", Toast.LENGTH_SHORT).show()
                         }
                     }
                 },
@@ -657,7 +595,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
     }
 }
 
-// プレビュー用のComposable関数。
+// プレビュー用のComposable関数
 // Android Studioのプレビュー機能でUIを確認するために使用される。
 @Preview(showBackground = true)
 @Composable
