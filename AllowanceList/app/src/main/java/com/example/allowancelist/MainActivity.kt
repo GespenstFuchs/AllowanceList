@@ -31,7 +31,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -43,13 +42,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import com.example.allowancelist.ui.theme.AllowanceListTheme
 import java.text.DecimalFormat
 import java.time.LocalDate
@@ -107,7 +103,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
     val context = LocalContext.current
 
     // プリファレンスを読み込み、オブジェクトを生成する。
-    val sharedPref = context.getSharedPreferences("allowance_list", Context.MODE_PRIVATE)
+        val sharedPref = context.getSharedPreferences("allowance_list", Context.MODE_PRIVATE)
 
     // 保存しているテキストを読み込む。
     // パス：/data/data/com.example.allowancelist/shared_prefs/allowance_list.xml
@@ -134,32 +130,6 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             putString(
                 "ALLOWANCE_LIST_TEXT",
                 itemsList.joinToString("\n") { it.raw.value })
-        }
-    }
-
-    // ライフサイクルオーナーを取得・保持する。
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    // Composableが画面に表示された時に一度だけ実行される処理
-    DisposableEffect(lifecycleOwner) {
-        // ライフサイクルイベントを監視するオブジェクトを生成する。
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_STOP -> {
-                    // 画面が完全に見えなくなった時（バックグラウンド）に、保存処理を行う。
-                    saveToFile()
-                }
-                // エラーになるために追加している。
-                else -> {}
-            }
-        }
-
-        // ライフサイクルにオブザーバーを登録する。
-        lifecycleOwner.lifecycle.addObserver(observer)
-
-        // Composableが破棄された時にオブザーバーを解除する。
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
