@@ -494,6 +494,12 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                         itemsList.add(0, ItemData(raw = mutableStateOf(newRaw)))
                         saveToFile()
                         updateTotal()
+
+                        // 各入力項目をクリアする。
+                        dateText = ""
+                        yenText = ""
+                        memoText = ""
+
                         Toast.makeText(context, "新規追加しました。", Toast.LENGTH_SHORT).show()
                 }
             },
