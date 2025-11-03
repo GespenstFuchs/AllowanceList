@@ -87,9 +87,6 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Allowancelist(modifier: Modifier = Modifier) {
-    // ファイル名を定義する。
-    val fileName = "小遣いリスト.txt"
-
     // 背景色を定義する。
     val defaultColor = Color(0xFFb2ffff)
     val changedColor = Color(0xFFD3D3D3)
@@ -496,7 +493,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                         updateTotal()
 
                         // 各入力項目をクリアする。
-                        dateText = ""
+                        dateText = LocalDate.now().format(dateFormatter)
                         yenText = ""
                         memoText = ""
 
@@ -516,6 +513,12 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                     itemsList.removeAll { it.bgColor.value == changedColor }
                     saveToFile()
                     updateTotal()
+
+                    // 各入力項目をクリアする。
+                    dateText = LocalDate.now().format(dateFormatter)
+                    yenText = ""
+                    memoText = ""
+
                     Toast.makeText(context, "削除しました。", Toast.LENGTH_SHORT).show()
 
                     // 削除ボタンを非活性にする。
