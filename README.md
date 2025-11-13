@@ -8,3 +8,6 @@
 
  ・外部ストレージは、必ずしもSDカードなどを指すものではない。内部のものも含む。
  
+ ・テキストを保存していたパス
+ 　/data/data/com.example.allowancelist/shared_prefs/allowance_list.xml
+  
