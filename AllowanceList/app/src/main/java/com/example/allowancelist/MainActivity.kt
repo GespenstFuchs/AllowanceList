@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,8 +24,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -88,22 +91,22 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun Allowancelist(modifier: Modifier = Modifier) {
     // 背景色を定義する。
-    val defaultColor = Color(0xFFb2ffff)
-    val changedColor = Color(0xFFD3D3D3)
+    val defaultColor = Color(0xFFE0FFFF)
+    val selectedColor = Color(0xFFFFEAEA)
 
     // 項目データクラス
     data class ItemData(
+        val checked: MutableState<Boolean> = mutableStateOf(false),
         var raw: MutableState<String> = mutableStateOf("初期値"),    // カンマ区切り文字列
-        val bgColor: MutableState<Color> = mutableStateOf(defaultColor)
+        var bgColor: MutableState<Color> = mutableStateOf(defaultColor)
     )
 
     val context = LocalContext.current
 
     // プリファレンスを読み込み、オブジェクトを生成する。
-        val sharedPref = context.getSharedPreferences("allowance_list", Context.MODE_PRIVATE)
+    val sharedPref = context.getSharedPreferences("allowance_list", Context.MODE_PRIVATE)
 
     // 保存しているテキストを読み込む。
-    // パス：/data/data/com.example.allowancelist/shared_prefs/allowance_list.xml
     val readText = sharedPref.getString("ALLOWANCE_LIST_TEXT", "")
 
     // 改行ごとに分割して、空行は除外する。
@@ -121,8 +124,8 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
         }
     }
 
-    // ファイル保存処理
-    fun saveToFile() {
+    // テキスト保存処理
+    fun saveToText() {
         sharedPref.edit(commit = true) {
             putString(
                 "ALLOWANCE_LIST_TEXT",
@@ -266,93 +269,88 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        LazyColumn(
+        // 枠線
+        Box(
             modifier = Modifier
-                .weight(1f) // 全領域を使用する。
                 .fillMaxWidth()
-                .background(Color(0xFF8A2BE2))
+                .weight(1f)
+                .border(
+                    width = 4.dp,
+                    color = Color(0xFF8A2BE2),
+                )
+                .background(Color(0xFF8A2BE2), shape = RoundedCornerShape(8.dp))
         ) {
-            itemsIndexed(itemsList) { index, item ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF8A2BE2))
+            ) {
                 // カンマで分割する。
-                val itemParts = item.raw.value.split(",", limit = 3)
+                itemsIndexed(itemsList) { index, item ->
+                    val itemParts = item.raw.value.split(",", limit = 3)
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(60.dp)  // 固定しないと、Textに合わせて項目の高さが変更される。
-                        .padding(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 0.dp)
-                        .background(item.bgColor.value)
-                        .combinedClickable(
-                            onClick = {
-                                // 全項目の背景色をデフォルトにリセットする。
-                                itemsList.forEach { it.bgColor.value = defaultColor }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                            .background(item.bgColor.value)
+                            .combinedClickable(
+                                onClick = {
+                                    // 全項目の背景色をデフォルトにリセットする。
+                                    itemsList.forEach { it.bgColor.value = defaultColor }
 
-                                // 選択位置を保持する。
-                                selectedItemIndex.intValue = index
+                                    // 選択位置を保持する。
+                                    selectedItemIndex.intValue = index
 
-                                // 選択した項目の背景色を変更する。
-                                item.bgColor.value = Color(0xFFFFEAEA)
+                                    // 選択した項目の背景色を変更する。
+                                    item.bgColor.value = selectedColor
 
-                                // カンマで分割する。
-                                val parts = item.raw.value.split(",", limit = 3)
+                                    // 値を設定する。
+                                    dateText = itemParts[0]
+                                    yenText = itemParts[1].replace(",", "")
+                                    memoText = itemParts[2]
 
-                                // 日付
-                                dateText = parts[0]
+                                    // 保存ボタンを活性にする。
+                                    saveButtonEnabled = true
+                                },
+                            ),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 削除用チェックボックス
+                        Checkbox(
+                            checked = item.checked.value,
+                            onCheckedChange = { isChecked ->
+                                // チェックを設定する。
+                                item.checked.value = isChecked
 
-                                // 金額
-                                yenText = parts[1].replace(",", "")
-
-                                // メモ
-                                memoText = parts[2]
-
-                                // 削除ボタンを非活性にする。
-                                deleteButtonEnabled = false
-
-                                // 保存ボタンを活性にする。
-                                saveButtonEnabled = true
-                            },
-                            onLongClick = {
-                                // 背景色を判定する。
-                                if (item.bgColor.value == changedColor) {
-                                    // 変更色の場合
-
-                                    // 背景色を変更する。
-                                    item.bgColor.value = defaultColor
-
-                                    // 全項目の背景色がデフォルトカラーの場合、削除ボタンを非活性にする。
-                                    deleteButtonEnabled = itemsList.any { it.bgColor.value == changedColor }
-                                } else {
-                                    // 通常色の場合
-
-                                    // 背景色を変更する。
-                                    item.bgColor.value = changedColor
-
-                                    // 削除ボタンを活性にする。
-                                    deleteButtonEnabled = true
-                                }
+                                // 削除ボタンの活性状態を設定する。
+                                deleteButtonEnabled = itemsList.any { listItem -> listItem.checked.value }
                             }
                         )
-                )
-                {
-                    // 設定する文字色を設定する。
-                    var setColor = Color.Black
-                    if (itemParts[1][0] == '-') {
-                        setColor = Color.Red
+
+                        Column {
+                            // 設定する文字色を設定する。
+                            val setColor = if (itemParts[1].startsWith("-")) Color.Red else Color.Black
+
+                            // 日付・金額
+                            Text(
+                                text = " ${itemParts[0]}    ¥${moneyFormatter.format(itemParts[1].toInt())}",
+                                color = setColor,
+                                fontSize = 20.sp
+                            )
+
+                            // メモ
+                            Text(
+                                text = " ${itemParts[2]}",
+                                color = Color.Black,
+                                fontSize = 16.sp
+                            )
+                        }
                     }
 
-                    Text(
-                        // リスト項目を表示する。
-                        text = " " + itemParts[0] + " " + "¥" + moneyFormatter.format(itemParts[1].toInt()) + "\n " + itemParts[2],
-                        color = setColor,
-                        style = androidx.compose.ui.text.TextStyle(
-                            fontSize = 20.sp,
-                            color = Color.Black
-                        ),
-                        modifier = Modifier.align(Alignment.CenterStart)
-                    )
+                    // 項目間のスペース
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
-
-                Spacer(modifier = Modifier.height(4.dp))
             }
         }
 
@@ -489,7 +487,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                     if (checkEdit()) {
                         val newRaw = "${dateText},${yenText},$memoText"
                         itemsList.add(0, ItemData(raw = mutableStateOf(newRaw)))
-                        saveToFile()
+                        saveToText()
                         updateTotal()
 
                         // 各入力項目をクリアする。
@@ -509,9 +507,9 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
             OutlinedButton(
                 enabled = deleteButtonEnabled,
                 onClick = {
-                    // 背景色が変更されている項目を削除する。
-                    itemsList.removeAll { it.bgColor.value == changedColor }
-                    saveToFile()
+                    // チェックが入っている項目を削除する。
+                    itemsList.removeAll { it.checked.value }
+                    saveToText()
                     updateTotal()
 
                     // 各入力項目をクリアする。
@@ -548,7 +546,7 @@ private fun Allowancelist(modifier: Modifier = Modifier) {
                             val item = itemsList[selectedItemIndex.intValue]
                             val newRaw = "${dateText},${yenText},$memoText"
                             item.raw.value = newRaw
-                            saveToFile()
+                            saveToText()
                             updateTotal()
                             Toast.makeText(context, "保存しました。", Toast.LENGTH_SHORT).show()
                         }
